@@ -1,0 +1,73 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: flashsale-app
+    container_name: flashsale-app
+    restart: unless-stopped
+    working_dir: /var/www
+    volumes:
+      - ./:/var/www
+    networks:
+      - flashnet
+    depends_on:
+      - mysql
+      - redis
+
+  mysql:
+    image: mysql:8.0
+    container_name: flashsale-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: flashsale
+      MYSQL_USER: flashsale
+      MYSQL_PASSWORD: secret
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - flashnet
+
+  redis:
+    image: redis:7.0
+    container_name: flashsale-redis
+    ports:
+      - "6379:6379"
+    networks:
+      - flashnet
+
+  artisan:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: flashsale-artisan
+    working_dir: /var/www
+    entrypoint: ["php", "artisan"]
+    networks:
+      - flashnet
+    depends_on:
+      - mysql
+      - redis
+
+  queue:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: flashsale-queue
+    working_dir: /var/www
+    command: php artisan queue:work --sleep=3 --tries=3
+    depends_on:
+      - app
+      - redis
+      - mysql
+    networks:
+      - flashnet
+
+networks:
+  flashnet:
+
+volumes:
+  mysql_data:
