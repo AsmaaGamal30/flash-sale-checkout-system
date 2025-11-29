@@ -1,59 +1,191 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+﻿# Flash-Sale Checkout
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+## (Concurrency & Correctness)
 
-## About Laravel
+## Summary
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+This repository contains a focused Laravel API that demonstrates a small flash-sale checkout system. It implements a single finite-stock product, short-lived holds (reservations), order creation, and an idempotent/out-of-order-safe payment webhook. There is no UI — API only.
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+**Target platform**: Laravel 12, MySQL (InnoDB), Redis.
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+## Core features implemented
 
-## Learning Laravel
+-   Product endpoint: `GET /api/products/{id}` — returns product fields and accurate available stock.
+-   Create hold: `POST /api/holds { product_id, quantity }` — creates a 2-minute hold that immediately reduces available stock.
+-   Create order: `POST /api/orders { hold_id }` — consumes a valid hold and creates a pre-payment order.
+-   Payment webhook: `POST /api/payments/webhook` — idempotent and safe if delivered out of order; updates order to paid or cancels and releases stock.
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework. You can also check out [Laravel Learn](https://laravel.com/learn), where you will be guided through building a modern Laravel application.
+## Assumptions & Invariants
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+-   Each `Product` has a single integer `stock` field representing total units in MySQL (InnoDB).
+-   Availability = `stock - sum(active holds) - sum(pending orders)`; reads are cached for performance but cache is kept consistent with writes.
+-   Holds are short-lived (~2 minutes) and must be released by a background command when expired — releases restore availability.
+-   A `Hold` can be used once; once an `Order` is created from a `Hold` the hold is marked used.
+-   Webhook idempotency is enforced via a `WebhookIdempotencyKey` record; webhook processing is transactional and uses row locks to avoid races.
 
-## Laravel Sponsors
+## How to run (local, Docker)
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+Prerequisites: Docker + Docker Compose.
 
-### Premium Partners
+### 1) Build and start services:
 
-- **[Vehikl](https://vehikl.com)**
-- **[Tighten Co.](https://tighten.co)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Redberry](https://redberry.international/laravel-development)**
-- **[Active Logic](https://activelogic.com)**
+```bash
+docker-compose up -d --build
+```
 
-## Contributing
+### 2) Install dependencies:
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+```bash
+docker exec -it flashsale-app composer install
+```
 
-## Code of Conduct
+### 3) Set up environment and generate key:
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+```bash
+docker exec -it flashsale-app cp .env.example .env
+docker exec -it flashsale-app php artisan key:generate
+```
 
-## Security Vulnerabilities
+### 4) Run migrations & seed the sample product:
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+```bash
+docker exec -it flashsale-app php artisan migrate --seed
+```
 
-## License
+### 5) Services are now running:
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+-   **Web server**: `http://localhost:8000`
+-   **Queue worker**: Already running in `flashsale-queue` container
+-   **Scheduler**: Run the expired holds release command manually or set up a cron job
+
+To manually release expired holds:
+
+```bash
+docker exec -it flashsale-app php artisan holds:release-expired
+```
+
+Or run the scheduler continuously:
+
+```bash
+docker exec -it flashsale-app php artisan schedule:work
+```
+
+**Notes:**
+
+-   The queue worker runs automatically in the `flashsale-queue` container.
+-   The scheduled command `holds:release-expired` should run periodically. In production, set up a cron job. For local development, use `php artisan schedule:work`.
+-   The command uses a cache lock to avoid double-running.
+
+## API examples
+
+Access the API at `http://localhost:8000/api/`:
+
+-   **Get product**: `GET /api/products/1`
+-   **Create hold**: `POST /api/holds`
+    ```json
+    { "product_id": 1, "quantity": 2 }
+    ```
+    Returns: `{ "hold_id": 1, "expires_at": "2024-..." }`
+-   **Create order**: `POST /api/orders`
+    ```json
+    { "hold_id": 1 }
+    ```
+    Returns: `{ "order_id": 1, "status": "pending", "total_price": 199.98 }`
+-   **Payment webhook**: `POST /api/payments/webhook`
+
+    ```json
+    { "idempotency_key": "unique-key-123", "order_id": 1, "status": "success" }
+    ```
+
+-   **View metrics logs**: `GET /api/logs` — returns all metrics logs from the database
+
+## Running tests
+
+From the project root (host machine):
+
+```bash
+docker exec -it flashsale-app php artisan test
+```
+
+Or run specific test suite:
+
+```bash
+docker exec -it flashsale-app php artisan test --filter=FlashSaleFeatureTest
+```
+
+Automated tests cover:
+
+-   Parallel hold attempts around a stock boundary (ensures no oversell).
+-   Hold expiry returns availability.
+-   Webhook idempotency (replays of same key).
+-   Webhook arriving before order creation completes.
+-   Failed payment cancels order and restores availability.
+-   Complete flow from hold to paid order.
+-   Cache invalidation on stock changes.
+
+## Where to find logs & metrics
+
+-   **Application logs**: `storage/logs/laravel.log` (also visible in container logs)
+    ```bash
+    docker exec -it flashsale-app tail -f storage/logs/laravel.log
+    ```
+-   **Container logs**:
+
+    ```bash
+    docker logs -f flashsale-app
+    docker logs -f flashsale-queue
+    ```
+
+-   **Metrics API endpoint**: `GET /api/logs` — view all metrics logs via HTTP
+
+    ```bash
+    curl http://localhost:8000/api/logs
+    ```
+
+-   **Metrics database**: Stored in `metrics_logs` table (model: `App\Models\MetricsLog`)
+
+    ```bash
+    docker exec -it flashsale-app php artisan tinker
+    >>> MetricsLog::latest()->take(10)->get()
+    ```
+
+-   **Structured logs** include keys for `hold_id`, `product_id`, `order_id`, `idempotency_key`, and `error` when applicable.
+
+**Metrics logged:**
+
+-   `hold_created` — when a hold is successfully created
+-   `hold_released` — when a hold expires and is released
+-   `holds_batch_released` — batch release operations with count
+-   `order_paid` — when payment succeeds and order is marked paid
+-   `order_cancelled` — when payment fails and order is cancelled
+
+## Notes about correctness & concurrency
+
+-   All mutating operations that could race use database transactions and row-level locks (e.g., `lockForUpdate`) to avoid oversell and lost updates.
+-   Background expiry uses Laravel cache locks to prevent multiple workers from releasing the same holds concurrently.
+-   Webhook handling is transactional and uses a dedicated idempotency table to ensure at-least-once delivery does not produce inconsistent states.
+-   The system correctly handles out-of-order webhook delivery with retry logic.
+
+## Verification
+
+Run the provided tests to validate behavior:
+
+```bash
+docker exec -it flashsale-app php artisan test
+```
+
+## Troubleshooting
+
+**Database connection issues:**
+
+```bash
+docker exec -it flashsale-app php artisan config:clear
+docker exec -it flashsale-app php artisan migrate
+```
+
+**Clear cache:**
+
+```bash
+docker exec -it flashsale-app php artisan cache:clear
+docker exec -it flashsale-app php artisan config:clear
+```
