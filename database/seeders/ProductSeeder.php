@@ -15,7 +15,7 @@ class ProductSeeder extends Seeder
     {
         Product::create([
             'name' => 'Apple iPhone 17 Pro',
-            'price' => 9699900, // Price in cents
+            'price' => 96999,
             'stock' => 20,
         ]);
     }

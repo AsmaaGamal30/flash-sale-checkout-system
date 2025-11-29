@@ -4,7 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 
-class WebhookIdempotencyKeys extends Model
+class WebhookIdempotencyKey extends Model
 {
     protected $guarded = [];
 
