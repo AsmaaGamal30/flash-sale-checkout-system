@@ -144,13 +144,6 @@ Automated tests cover:
 
 -   **Metrics database**: Stored in `metrics_logs` table (model: `App\Models\MetricsLog`)
 
-    ```bash
-    docker exec -it flashsale-app php artisan tinker
-    >>> MetricsLog::latest()->take(10)->get()
-    ```
-
--   **Structured logs** include keys for `hold_id`, `product_id`, `order_id`, `idempotency_key`, and `error` when applicable.
-
 **Metrics logged:**
 
 -   `hold_created` — when a hold is successfully created
