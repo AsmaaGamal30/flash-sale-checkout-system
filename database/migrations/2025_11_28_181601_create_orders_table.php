@@ -12,12 +12,15 @@ return new class extends Migration {
     {
         Schema::create('orders', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('product_id')->constrained()->cascadeOnDelete();
-            $table->foreignId('hold_id')->constrained()->cascadeOnDelete();
-            $table->integer('quantity');
-            $table->string('status');
-            $table->integer('total_price');
+            $table->foreignId('product_id')->constrained()->onDelete('cascade');
+            $table->foreignId('hold_id')->nullable()->constrained()->onDelete('set null');
+            $table->integer('quantity')->unsigned();
+            $table->decimal('total_price', 10, 2);
+            $table->string('status')->default('pending');
             $table->timestamps();
+
+            $table->index('status');
+            $table->index('hold_id');
         });
     }
 

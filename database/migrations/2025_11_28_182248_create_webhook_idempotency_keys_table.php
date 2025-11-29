@@ -11,9 +11,13 @@ return new class extends Migration {
     public function up(): void
     {
         Schema::create('webhook_idempotency_keys', function (Blueprint $table) {
-            $table->id();
+$table->id();
             $table->string('key')->unique();
+            $table->foreignId('order_id')->nullable()->constrained()->onDelete('cascade');
+            $table->string('status');
+            $table->json('payload')->nullable();
             $table->timestamps();
+            $table->index(['key', 'status']);
         });
     }
 

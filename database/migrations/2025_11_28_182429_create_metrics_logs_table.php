@@ -15,6 +15,8 @@ return new class extends Migration {
             $table->string('type');
             $table->json('payload');
             $table->timestamps();
+            $table->index(['type', 'created_at']);
+
         });
     }
 
