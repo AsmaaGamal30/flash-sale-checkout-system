@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\OrderStatuses;
 use Illuminate\Database\Eloquent\Model;
 
 class Order extends Model
@@ -19,7 +20,7 @@ class Order extends Model
 
     public function markAsPaid(): void
     {
-        $this->update(['status' => 'paid']);
+        $this->update(['status' => OrderStatuses::PAID->value]);
         $this->product->invalidateStockCache();
 
         $this->product->decrement('stock', $this->quantity);
@@ -36,7 +37,7 @@ class Order extends Model
 
     public function cancel(): void
     {
-        $this->update(['status' => 'cancelled']);
+        $this->update(['status' => OrderStatuses::CANCELLED->value]);
         $this->product->invalidateStockCache();
 
         MetricsLog::create([

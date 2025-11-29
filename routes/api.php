@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\HoldController;
+use App\Http\Controllers\LogsController;
 use App\Http\Controllers\OrderController;
 use App\Http\Controllers\PaymentWebhookController;
 use App\Http\Controllers\ProductController;
@@ -14,3 +15,5 @@ Route::post('/holds', [HoldController::class, 'store'])->name('holds.store');
 Route::post('/orders', [OrderController::class, 'store'])->name('orders.store');
 
 Route::post('/payments/webhook', [PaymentWebhookController::class, 'handle'])->name('payments.webhook');
+
+Route::get('/logs', LogsController::class)->name('logs.index');

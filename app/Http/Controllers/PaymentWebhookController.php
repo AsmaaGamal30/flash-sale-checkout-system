@@ -6,7 +6,6 @@ use App\Http\Requests\PaymentWebhookRequest;
 use App\Models\Order;
 use App\Models\WebhookIdempotencyKey;
 use Exception;
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Symfony\Component\HttpFoundation\Response;
@@ -36,22 +35,14 @@ class PaymentWebhookController extends Controller
                     ], Response::HTTP_OK);
                 }
 
-                if (!$existingKey) {
-                    $existingKey = WebhookIdempotencyKey::create([
-                        'key' => $idempotencyKey,
-                        'order_id' => $orderId,
-                        'status' => 'processing',
-                        'payload' => $request->all(),
-                    ]);
-                }
-
                 $maxAttempts = 5;
                 $order = null;
 
                 for ($i = 0; $i < $maxAttempts; $i++) {
                     $order = Order::find($orderId);
-                    if ($order)
+                    if ($order) {
                         break;
+                    }
 
                     if ($i < $maxAttempts - 1) {
                         usleep(200000);
@@ -60,6 +51,15 @@ class PaymentWebhookController extends Controller
 
                 if (!$order) {
                     throw new Exception('Order not found after retries');
+                }
+
+                if (!$existingKey) {
+                    $existingKey = WebhookIdempotencyKey::create([
+                        'key' => $idempotencyKey,
+                        'order_id' => $orderId,
+                        'status' => 'processing',
+                        'payload' => $request->all(),
+                    ]);
                 }
 
                 $order = Order::lockForUpdate()->findOrFail($orderId);

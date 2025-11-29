@@ -14,7 +14,6 @@ return new class extends Migration {
             $table->id();
             $table->string('name');
             $table->decimal('price', 10, 2);
-            $table->string('currency')->default('EGP');
             $table->integer('stock');
             $table->timestamps();
         });

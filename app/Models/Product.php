@@ -2,7 +2,7 @@
 
 namespace App\Models;
 
-use App\OrderStatuses;
+use Exception;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -31,7 +31,6 @@ class Product extends Model
         });
     }
 
-
     public function calculateAvailableStock(): int
     {
         $heldQuantity = $this->holds()
@@ -47,12 +46,10 @@ class Product extends Model
         return max(0, $this->stock - $heldQuantity - $pendingOrderQuantity);
     }
 
-
     public function invalidateStockCache(): void
     {
         Cache::forget("product:{$this->id}:available_stock");
     }
-
 
     public function createHold(int $quantity): Hold
     {
@@ -62,7 +59,7 @@ class Product extends Model
             $availableStock = $product->calculateAvailableStock();
 
             if ($availableStock < $quantity) {
-                throw new \Exception('Insufficient stock available');
+                throw new Exception('Insufficient stock available');
             }
 
             $hold = $this->holds()->create([
